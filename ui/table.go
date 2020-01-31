@@ -3,21 +3,24 @@ package ui
 import (
 	"fmt"
 	"image"
+	"time"
 
 	. "github.com/gizak/termui/v3"
 )
 
+// Table is custom table implemented on top of the basic Block
+// It allows for an arbitrary number of rows and columns with no separators
+// and per entry styling.
 type Table struct {
 	*Block
 	Header []string
 	Rows   [][]string
 	Styles [][]*Style
+	Updated time.Time
 
 	ColWidths []int
 	ColGap    int
 	PadLeft   int
-
-	ShowLocation bool
 
 	SelectedRow int
 	TopRow      int
@@ -25,6 +28,7 @@ type Table struct {
 	ColResizer func()
 }
 
+// NewTable constructs a new table
 func NewTable() *Table {
 	return &Table{
 		Block:       NewBlock(),
@@ -34,12 +38,12 @@ func NewTable() *Table {
 	}
 }
 
+// Draw draws the table to the given buffer
 func (table *Table) Draw(buf *Buffer) {
 	table.Block.Draw(buf)
 
-	if table.ShowLocation {
-		table.drawLocation(buf)
-	}
+	table.drawLocation(buf)
+	table.drawUpdated(buf)
 
 	table.ColResizer()
 
@@ -115,28 +119,38 @@ func (table *Table) drawLocation(buf *Buffer) {
 	buf.SetString(loc, table.TitleStyle, image.Pt(table.Max.X-width-2, table.Min.Y))
 }
 
-func (self *Table) calcPos() {
-	if self.SelectedRow < 0 {
-		self.SelectedRow = 0
+func (table *Table) drawUpdated(buf *Buffer) {
+	t := table.Updated.Format("15:04:05")
+	width := len(t)
+	buf.SetString(t, table.TitleStyle, image.Pt(table.Max.X/2 - width/2, table.Min.Y))
+}
+
+func (table *Table) calcPos() {
+	if table.SelectedRow < 0 {
+		table.SelectedRow = 0
 	}
-	if self.SelectedRow < self.TopRow {
-		self.TopRow = self.SelectedRow
+	if table.SelectedRow < table.TopRow {
+		table.TopRow = table.SelectedRow
 	}
 
-	if self.SelectedRow > len(self.Rows)-1 {
-		self.SelectedRow = len(self.Rows) - 1
+	if table.SelectedRow > len(table.Rows)-1 {
+		table.SelectedRow = len(table.Rows) - 1
 	}
-	if self.SelectedRow > self.TopRow+(self.Inner.Dy()-2) {
-		self.TopRow = self.SelectedRow - (self.Inner.Dy() - 2)
+	if table.SelectedRow > table.TopRow+(table.Inner.Dy()-2) {
+		table.TopRow = table.SelectedRow - (table.Inner.Dy() - 2)
 	}
 }
 
-func (self *Table) ScrollUp() {
-	self.SelectedRow--
-	self.calcPos()
+// -------------------------------------------------------------------------
+
+// ScrollUp scrolls up the cursor in the table
+func (table *Table) ScrollUp() {
+	table.SelectedRow--
+	table.calcPos()
 }
 
-func (self *Table) ScrollDown() {
-	self.SelectedRow++
-	self.calcPos()
+// ScrollDown scrolls down the cursor in the table
+func (table *Table) ScrollDown() {
+	table.SelectedRow++
+	table.calcPos()
 }
