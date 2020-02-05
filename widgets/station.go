@@ -2,11 +2,12 @@ package widgets
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/noxer/departures/api"
-	"github.com/noxer/departures/ui"
+	"github.com/buengese/departures/api"
+	"github.com/buengese/departures/ui"
 
 	termui "github.com/gizak/termui/v3"
 )
@@ -21,7 +22,7 @@ var (
 // StationSettings contains general configuration for each monitored station
 // e.g ID and filtering settings
 type StationSettings struct {
-	ID                string
+	IDs               []string
 	FilterMode        string
 	FilterDestination string
 	FilterLine        string
@@ -32,20 +33,23 @@ type StationSettings struct {
 // StationWidget represents a Station and display's it in table form
 type StationWidget struct {
 	*ui.Table
-	settings       *StationSettings
-	departures     []api.Result
-	updateInterval time.Duration
+	settings          *StationSettings
+	departures        []api.Result
+	stationDepartures [][]api.Result
+	updateInterval    time.Duration
 }
 
 // NewStationWidget constructs a new StationWidget with the given settings
 func NewStationWidget(settings *StationSettings) *StationWidget {
 	self := &StationWidget{
-		Table:          ui.NewTable(),
-		settings:       settings,
-		updateInterval: time.Minute,
+		Table:             ui.NewTable(),
+		settings:          settings,
+		updateInterval:    time.Minute,
+		stationDepartures: make([][]api.Result, len(settings.IDs)),
 	}
 	self.Title = " Station "
 	self.Header = []string{"Line", "Destination", "Time"}
+	self.Footer = " Last refresh: never "
 	self.ColGap = 3
 	self.PadLeft = 2
 	self.ColResizer = func() {
@@ -54,7 +58,9 @@ func NewStationWidget(settings *StationSettings) *StationWidget {
 		}
 	}
 
-	self.update()
+	for i := range self.settings.IDs {
+		self.updateStation(i)
+	}
 
 	go func() {
 		for range time.NewTicker(self.updateInterval).C {
@@ -68,8 +74,26 @@ func NewStationWidget(settings *StationSettings) *StationWidget {
 }
 
 func (station *StationWidget) update() {
+	for i := range station.settings.IDs {
+		station.updateStation(i)
+	}
 
-	deps, err := api.GetDepartures(station.settings.ID, station.settings.Min)
+	departures := station.departures[0:]
+	for _, deps := range station.stationDepartures {
+		departures = append(departures, deps...)
+	}
+
+	sort.Slice(departures, func(i, j int) bool {
+		return departures[i].When.Before(departures[j].When)
+	})
+	station.departures = departures
+
+	station.generateTable()
+	station.Footer = fmt.Sprintf(" Last refresh: %s ", time.Now().Format("15:04:05"))
+}
+
+func (station *StationWidget) updateStation(i int) {
+	deps, err := api.GetDepartures(station.settings.IDs[i], station.settings.Min)
 	if err != nil {
 		return
 	}
@@ -110,8 +134,7 @@ func (station *StationWidget) update() {
 		// the entry survived the filters, append it to the filtered list
 		filteredDeps = append(filteredDeps, dep)
 	}
-	station.departures = filteredDeps
-	station.generateTable()
+	station.stationDepartures[i] = filteredDeps
 }
 
 func (station *StationWidget) generateTable() {
@@ -137,7 +160,6 @@ func (station *StationWidget) generateTable() {
 
 	station.Rows = strings
 	station.Styles = styles
-	station.Updated = time.Now()
 }
 
 // -------------------------------------------------------------------------

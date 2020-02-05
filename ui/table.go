@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"image"
-	"time"
 
 	. "github.com/gizak/termui/v3"
 )
@@ -16,7 +15,8 @@ type Table struct {
 	Header []string
 	Rows   [][]string
 	Styles [][]*Style
-	Updated time.Time
+
+	Footer string
 
 	ColWidths []int
 	ColGap    int
@@ -44,7 +44,6 @@ func (table *Table) Draw(buf *Buffer) {
 
 	table.drawLocation(buf)
 	table.drawUpdated(buf)
-
 	table.ColResizer()
 
 	colXPos := []int{}
@@ -120,9 +119,8 @@ func (table *Table) drawLocation(buf *Buffer) {
 }
 
 func (table *Table) drawUpdated(buf *Buffer) {
-	t := table.Updated.Format("15:04:05")
-	width := len(t)
-	buf.SetString(t, table.TitleStyle, image.Pt(table.Max.X/2 - width/2, table.Min.Y))
+	width := len(table.Footer)
+	buf.SetString(table.Footer, table.TitleStyle, image.Pt(table.Max.X/2-width/2, table.Max.Y-1))
 }
 
 func (table *Table) calcPos() {

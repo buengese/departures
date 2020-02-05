@@ -1,14 +1,11 @@
-# departures
+# departures-interactive
 Show departure times for your Berlin public transport station
 
-![screenshot of a departure table](https://raw.githubusercontent.com/noxer/departures/master/images/screen0.png)
-
 ## install
-Currently we are offering binary (pre-)releases and the source code. The binary releases can be found on the [releases](https://github.com/noxer/departures/releases) page. 
 To install from source you need to have a current Go version installed.
 
 ```bash
-go get -u github.com/noxer/departures
+go get -u github.com/buengese/departures
 ```
 Now you should have the `departures` binary installed in your `$GOPATH/bin` directory. You can call it from there or add the directory to your `$PATH`.
 
@@ -45,7 +42,6 @@ You can filter only connections that allow you to take a bike by adding the '-bi
 ```bash
 ~$ departures -id 900000029305
 ```
-
 
 ## attribution
 I'm using https://2.bvg.transport.rest to request the current timetable data. Thanks to [derhuerst](https://github.com/derhuerst).

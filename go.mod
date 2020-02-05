@@ -1,4 +1,4 @@
-module github.com/noxer/departures
+module github.com/buengese/departures
 
 go 1.13
 

@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/noxer/departures/api"
+	"github.com/buengese/departures/api"
 
+	w "github.com/buengese/departures/widgets"
 	termui "github.com/gizak/termui/v3"
-	w "github.com/noxer/departures/widgets"
 	"gopkg.in/AlecAivazis/survey.v1"
 )
 
@@ -27,6 +28,78 @@ var (
 	colorBorderLabel = 7
 	colorBorderLine  = 6
 )
+
+type flagArray []string
+
+func (i *flagArray) String() string {
+	return strings.Join(*i, ",")
+}
+
+func (i *flagArray) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
+func main() {
+	// parse the command line arguments
+	settings := &w.StationSettings{}
+
+	var (
+		stationName string
+		search      string
+		ids         flagArray
+	)
+
+	flag.Var(&ids, "id", "ID of the stop")
+	flag.StringVar(&settings.FilterMode, "filter-mode", "", "Filter the list for this mode of transporation (Comma separated)")
+	flag.StringVar(&settings.FilterDestination, "filter-destination", "", "Filter the list for this destination (Comma separated)")
+	flag.StringVar(&settings.FilterLine, "filter-line", "", "Filter the list for this line (Comma separated)")
+	flag.IntVar(&settings.Min, "min", 60, "Number of minutes you want to see the departures for")
+	flag.StringVar(&search, "search", "", "Search for the stop name to get the stop ID")
+	flag.StringVar(&stationName, "station", "", "Fetch departures for given station. Ignored if ID is provided")
+	flag.BoolVar(&settings.Bicycle, "bicycle", false, "Only show connections that allow bicycle conveyance.")
+	flag.Parse()
+
+	// check if the user just wants to find the station ID
+	if search != "" {
+		stations, err := api.SearchStations(search)
+		if err != nil {
+			fmt.Println("Could not query stations")
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Found %d station(s):\n", len(stations))
+		for _, s := range stations {
+			fmt.Printf("  %s - %s\n", s.ID, s.Name)
+		}
+		return
+	}
+
+	if len(ids) == 0 {
+		settings.IDs = []string{"900000051353", "900000051303"}
+	} else {
+		settings.IDs = ids
+	}
+
+	if err := termui.Init(); err != nil {
+		fmt.Printf("failed to initialize termui: %v", err)
+	}
+	defer termui.Close()
+
+	setupStyles()
+	stat = w.NewStationWidget(settings)
+
+	// using a grid here would allow to display multiple station widgets at
+	// once tmux style. this hasn't been implemented yet
+	grid = termui.NewGrid()
+	grid.Set(termui.NewRow(1.0, stat))
+	termWidth, termHeight := termui.TerminalDimensions()
+	grid.SetRect(0, 0, termWidth, termHeight)
+
+	termui.Render(grid)
+	eventLoop()
+}
 
 func setupStyles() {
 	termui.Theme.Default = termui.NewStyle(termui.Color(colorFg), termui.Color(colorBg))
@@ -67,80 +140,7 @@ func eventLoop() {
 	}
 }
 
-func main() {
-	// parse the command line arguments
-	settings := &w.StationSettings{}
-
-	// may need to readd retries
-	var (
-		//retries    int
-		//retryPause time.Duration
-		stationName string
-		search      string
-	)
-
-	flag.StringVar(&settings.ID, "id", "", "ID of the stop")
-	flag.StringVar(&settings.FilterMode, "filter-mode", "", "Filter the list for this mode of transporation (Comma separated)")
-	flag.StringVar(&settings.FilterDestination, "filter-destination", "", "Filter the list for this destination (Comma separated)")
-	flag.StringVar(&settings.FilterLine, "filter-line", "", "Filter the list for this line (Comma separated)")
-	//flag.IntVar(&retries, "retries", 3, "Number of retries before giving up")
-	//flag.DurationVar(&retryPause, "retry-pause", time.Second, "Pause between retries")
-	flag.IntVar(&settings.Min, "min", 60, "Number of minutes you want to see the departures for")
-	flag.StringVar(&search, "search", "", "Search for the stop name to get the stop ID")
-	flag.StringVar(&stationName, "station", "", "Fetch departures for given station. Ignored if ID is provided")
-	flag.BoolVar(&settings.Bicycle, "bicycle", false, "Only show connections that allow bicycle conveyance.")
-	flag.Parse()
-
-	// check if the user just wants to find the station ID
-	if search != "" {
-		stations, err := api.SearchStations(search)
-		if err != nil {
-			fmt.Println("Could not query stations")
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("Found %d station(s):\n", len(stations))
-		for _, s := range stations {
-			fmt.Printf("  %s - %s\n", s.ID, s.Name)
-		}
-		return
-	}
-
-	// search of the station and provide user option to choose
-	if settings.ID == "" && stationName != "" {
-		s, err := promptForStation(stationName)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			settings.ID = s.ID
-		}
-	}
-
-	// set default id if empty
-	if settings.ID == "" {
-		//fmt.Println("station ID is empty. Defaulting to: 900000100003")
-		settings.ID = "900000100003"
-	}
-
-	if err := termui.Init(); err != nil {
-		fmt.Printf("failed to initialize termui: %v", err)
-	}
-	defer termui.Close()
-
-	setupStyles()
-	stat = w.NewStationWidget(settings)
-
-	// using a grid here would allow to display multiple station widgets at
-	// once tmux style. this hasn't been implemented yet
-	grid = termui.NewGrid()
-	grid.Set(termui.NewRow(1.0, stat))
-	termWidth, termHeight := termui.TerminalDimensions()
-	grid.SetRect(0, 0, termWidth, termHeight)
-
-	termui.Render(grid)
-	eventLoop()
-}
+// -------------------------------------------------------------------------------
 
 func promptForStation(name string) (*api.Station, error) {
 	stations, err := api.SearchStations(name)
