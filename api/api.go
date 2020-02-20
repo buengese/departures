@@ -102,4 +102,5 @@ type Result struct {
 	} `json:"remarks"`
 	Delay    int    `json:"delay"`
 	Platform string `json:"platform"`
+	Station  string
 }

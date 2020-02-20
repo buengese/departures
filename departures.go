@@ -1,11 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -13,7 +13,6 @@ import (
 
 	w "github.com/buengese/departures/widgets"
 	termui "github.com/gizak/termui/v3"
-	"gopkg.in/AlecAivazis/survey.v1"
 )
 
 var (
@@ -22,35 +21,23 @@ var (
 	grid *termui.Grid
 	stat *w.StationWidget
 
-	// TODO make this configurable?
 	colorFg          = 7
 	colorBg          = -1
 	colorBorderLabel = 7
 	colorBorderLine  = 6
 )
 
-type flagArray []string
-
-func (i *flagArray) String() string {
-	return strings.Join(*i, ",")
-}
-
-func (i *flagArray) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
-
 func main() {
-	// parse the command line arguments
-	settings := &w.StationSettings{}
-
 	var (
 		stationName string
 		search      string
-		ids         flagArray
+		configFile  string
 	)
 
-	flag.Var(&ids, "id", "ID of the stop")
+	settings := w.StationSettings{}
+
+	flag.StringVar(&configFile, "config", "", "Config file")
+	flag.StringVar(&settings.ID, "id", "", "ID of the stop")
 	flag.StringVar(&settings.FilterMode, "filter-mode", "", "Filter the list for this mode of transporation (Comma separated)")
 	flag.StringVar(&settings.FilterDestination, "filter-destination", "", "Filter the list for this destination (Comma separated)")
 	flag.StringVar(&settings.FilterLine, "filter-line", "", "Filter the list for this line (Comma separated)")
@@ -60,7 +47,7 @@ func main() {
 	flag.BoolVar(&settings.Bicycle, "bicycle", false, "Only show connections that allow bicycle conveyance.")
 	flag.Parse()
 
-	// check if the user just wants to find the station ID
+	// check if the user just wants to find the station ID we'll exit afterwards
 	if search != "" {
 		stations, err := api.SearchStations(search)
 		if err != nil {
@@ -76,29 +63,53 @@ func main() {
 		return
 	}
 
-	if len(ids) == 0 {
-		settings.IDs = []string{"900000051353", "900000051303"}
+	// if the user supplies a config we'll use it
+	var config *w.Config
+	if configFile != "" {
+		config = loadConfig(configFile)
 	} else {
-		settings.IDs = ids
+		if settings.ID == "" {
+			settings.ID = "900000051353"
+			settings.Name = "A7"
+		}
+		config = &w.Config{
+			UpdateInterval: time.Minute,
+			Stations:       []w.StationSettings{settings},
+		}
 	}
 
 	if err := termui.Init(); err != nil {
 		fmt.Printf("failed to initialize termui: %v", err)
+		os.Exit(1)
 	}
 	defer termui.Close()
 
 	setupStyles()
-	stat = w.NewStationWidget(settings)
+	stat = w.NewStationWidget(config)
 
-	// using a grid here would allow to display multiple station widgets at
-	// once tmux style. this hasn't been implemented yet
 	grid = termui.NewGrid()
 	grid.Set(termui.NewRow(1.0, stat))
+
 	termWidth, termHeight := termui.TerminalDimensions()
 	grid.SetRect(0, 0, termWidth, termHeight)
 
 	termui.Render(grid)
 	eventLoop()
+}
+
+func loadConfig(configName string) *w.Config {
+	var config *w.Config
+	configFile, err := os.Open(configName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config File: %s\n", err.Error())
+		os.Exit(1)
+	}
+	defer configFile.Close()
+
+	jsonParser := json.NewDecoder(configFile)
+	jsonParser.Decode(&config)
+
+	return config
 }
 
 func setupStyles() {
@@ -138,45 +149,4 @@ func eventLoop() {
 			}
 		}
 	}
-}
-
-// -------------------------------------------------------------------------------
-
-func promptForStation(name string) (*api.Station, error) {
-	stations, err := api.SearchStations(name)
-	if err != nil {
-		return nil, fmt.Errorf("could not query stations")
-	}
-
-	if l := len(stations); l == 0 {
-		// no stations found
-		return nil, fmt.Errorf("could not find matching stations")
-	} else if l == 1 {
-		return &stations[0], nil
-	}
-	// set first result as fallback
-	fallback := stations[0].Name
-
-	// convert to map[string]station to get station after user prompt
-	var options []string
-	optionStation := map[string]api.Station{}
-	for _, s := range stations {
-		options = append(options, s.Name)
-		optionStation[s.Name] = s
-	}
-
-	prompt := &survey.Select{
-		Message: "Choose a station:",
-		Options: options,
-		Default: fallback,
-	}
-
-	var choice string
-	if err = survey.AskOne(prompt, &choice, nil); err != nil {
-		fmt.Println("Failed to get answer on station list. Defaulting to", fallback)
-		choice = fallback
-	}
-
-	s := optionStation[choice]
-	return &s, nil
 }

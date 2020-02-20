@@ -12,53 +12,69 @@ import (
 	termui "github.com/gizak/termui/v3"
 )
 
-// TODO make configurable? maybe even a config file?
 var (
 	styleEarly  = termui.NewStyle(3)
 	styleOnTime = termui.NewStyle(10)
 	styleLate   = termui.NewStyle(1)
 )
 
+// Config blabla
+type Config struct {
+	UpdateInterval time.Duration     `json:"updateinterval"`
+	Stations       []StationSettings `json:"stations"`
+}
+
 // StationSettings contains general configuration for each monitored station
 // e.g ID and filtering settings
 type StationSettings struct {
-	IDs               []string
-	FilterMode        string
-	FilterDestination string
-	FilterLine        string
-	Min               int
-	Bicycle           bool
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	FilterMode        string `json:"filtername"`
+	FilterDestination string `json:"filterdestination"`
+	FilterLine        string `json:"filterline"`
+	Min               int    `json:"min"`
+	Bicycle           bool   `json:"bicycle"`
 }
 
 // StationWidget represents a Station and display's it in table form
 type StationWidget struct {
 	*ui.Table
-	settings          *StationSettings
+	settings          []StationSettings
 	departures        []api.Result
 	stationDepartures [][]api.Result
 	updateInterval    time.Duration
 }
 
 // NewStationWidget constructs a new StationWidget with the given settings
-func NewStationWidget(settings *StationSettings) *StationWidget {
+func NewStationWidget(config *Config) *StationWidget {
 	self := &StationWidget{
 		Table:             ui.NewTable(),
-		settings:          settings,
-		updateInterval:    time.Minute,
-		stationDepartures: make([][]api.Result, len(settings.IDs)),
+		settings:          config.Stations,
+		updateInterval:    config.UpdateInterval,
+		stationDepartures: make([][]api.Result, len(config.Stations)),
 	}
 	self.Title = " Station "
-	self.Header = []string{"Line", "Destination", "Time"}
 	self.Footer = " Last refresh: never "
 	self.ColGap = 3
 	self.PadLeft = 2
-	self.ColResizer = func() {
-		self.ColWidths = []int{
-			4, maxInt(self.Inner.Dx()-26, 10), 10,
+
+	if len(config.Stations) > 1 {
+		self.Header = []string{"Line", "Station", "Destination", "Time"}
+		self.ColResizer = func() {
+			self.ColWidths = []int{
+				4, 6, maxInt(self.Inner.Dx()-32, 10), 10,
+			}
+		}
+	} else {
+		self.Header = []string{"Line", "Destination", "Time"}
+		self.ColResizer = func() {
+			self.ColWidths = []int{
+				4, maxInt(self.Inner.Dx()-26, 10), 10,
+			}
 		}
 	}
 
-	for i := range self.settings.IDs {
+	for i := range self.settings {
 		self.updateStation(i)
 	}
 
@@ -74,11 +90,11 @@ func NewStationWidget(settings *StationSettings) *StationWidget {
 }
 
 func (station *StationWidget) update() {
-	for i := range station.settings.IDs {
+	for i := range station.settings {
 		station.updateStation(i)
 	}
 
-	departures := station.departures[0:]
+	var departures []api.Result
 	for _, deps := range station.stationDepartures {
 		departures = append(departures, deps...)
 	}
@@ -93,15 +109,15 @@ func (station *StationWidget) update() {
 }
 
 func (station *StationWidget) updateStation(i int) {
-	deps, err := api.GetDepartures(station.settings.IDs[i], station.settings.Min)
+	deps, err := api.GetDepartures(station.settings[i].ID, station.settings[i].Min)
 	if err != nil {
 		return
 	}
 
 	// initialize the filters
-	fm := filterSlice(station.settings.FilterMode)
-	fd := filterSlice(station.settings.FilterDestination)
-	fl := filterSlice(station.settings.FilterLine)
+	fm := filterSlice(station.settings[i].FilterMode)
+	fd := filterSlice(station.settings[i].FilterDestination)
+	fl := filterSlice(station.settings[i].FilterLine)
 
 	// calculate the length of the columns
 	from := time.Now().Add(-2 * time.Minute)
@@ -116,6 +132,7 @@ func (station *StationWidget) updateStation(i int) {
 		dep.Line.Product = strings.TrimSpace(dep.Line.Product)
 		dep.Direction = strings.TrimSpace(dep.Direction)
 		dep.Line.Name = strings.TrimSpace(dep.Line.Name)
+		dep.Station = station.settings[i].Name
 
 		// apply filters
 		if isFiltered(fm, dep.Line.Product) {
@@ -127,7 +144,7 @@ func (station *StationWidget) updateStation(i int) {
 		if isFiltered(fl, dep.Line.Name) {
 			continue
 		}
-		if station.settings.Bicycle && filterBike(dep) {
+		if station.settings[i].Bicycle && filterBike(dep) {
 			continue
 		}
 
@@ -142,19 +159,26 @@ func (station *StationWidget) generateTable() {
 	styles := make([][]*termui.Style, len(station.departures))
 
 	for i := range station.departures {
-		strings[i] = make([]string, 3)
-		styles[i] = make([]*termui.Style, 3)
+		strings[i] = make([]string, 4)
+		styles[i] = make([]*termui.Style, 4)
 
-		strings[i][0] = station.departures[i].Line.Name
-		strings[i][1] = station.departures[i].Direction
-		strings[i][2] = departureTime(station.departures[i])
+		k := 0
+		strings[i][k] = station.departures[i].Line.Name
+		k++
+		if len(station.settings) > 1 {
+			strings[i][k] = station.departures[i].Station
+			k++
+		}
+		strings[i][k] = station.departures[i].Direction
+		k++
+		strings[i][k] = departureTime(station.departures[i])
 
-		styles[i][2] = &styleOnTime
+		styles[i][k] = &styleOnTime
 		if station.departures[i].Delay > 0 {
-			styles[i][2] = &styleEarly
+			styles[i][k] = &styleEarly
 		}
 		if station.departures[i].Delay < 0 {
-			styles[i][2] = &styleLate
+			styles[i][k] = &styleLate
 		}
 	}
 

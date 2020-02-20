@@ -1,0 +1,23 @@
+{
+   "updateinterval":60000000000,
+   "stations":[
+      {
+         "id":"900000051353",
+         "name":"Arnim",
+         "filtername":"",
+         "filterdestination":"",
+         "filterline":"",
+         "min":60,
+         "bicycle":false
+      },
+      {
+         "id":"900000051303",
+         "name":"Dahlem",
+         "filtername":"",
+         "filterdestination":"",
+         "filterline":"",
+         "min":60,
+         "bicycle":false
+      }
+   ]
+}
