@@ -1,5 +1,5 @@
 # departures-interactive
-Show departure times for your Berlin public transport station
+Show departure times for your Berlin public transport station. This is a fork of the original departures intended to run on info displays or in the background
 
 ## install
 To install from source you need to have a current Go version installed.
@@ -25,22 +25,13 @@ You can limit the lines and directions shown. Multiple values must be separated 
 
 ```bash
 ~$ departures -id="900000100003" -filter-line="M4" -filter-destination="S Hackescher Markt"
-M4 S Hackescher Markt 10:57 (-1)
-M4 S Hackescher Markt 11:02 (-1)
-M4 S Hackescher Markt 11:07 (-1)
-M4 S Hackescher Markt 11:13
 ```
 
-You can provide the station name as a string in alternative to the station id. The `-station` flag will be ignored if `-id` is used. 
+You can also create a config file that allows displaying an arbitrary number of stations at the same time.
+An example config file is included in this repository
 
 ```bash
-~$ departures -station Hauptbahnhof
-```
-
-You can filter only connections that allow you to take a bike by adding the '-bicycle' argument.
-
-```bash
-~$ departures -id 900000029305
+~$ departures -config conf.json
 ```
 
 ## attribution
