@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/buengese/departures/api"
@@ -43,6 +44,7 @@ type StationWidget struct {
 	departures        []api.Result
 	stationDepartures [][]api.Result
 	updateInterval    time.Duration
+	updateMutex       sync.Mutex
 }
 
 // NewStationWidget constructs a new StationWidget with the given settings
@@ -74,15 +76,11 @@ func NewStationWidget(config *Config) *StationWidget {
 		}
 	}
 
-	for i := range self.settings {
-		self.updateStation(i)
-	}
-
 	go func() {
 		for range time.NewTicker(self.updateInterval).C {
-			self.Lock()
+			self.updateMutex.Lock()
 			self.update()
-			self.Unlock()
+			self.updateMutex.Unlock()
 		}
 	}()
 
@@ -104,8 +102,9 @@ func (station *StationWidget) update() {
 	})
 	station.departures = departures
 
+	station.Lock()
 	station.generateTable()
-	station.Footer = fmt.Sprintf(" Last refresh: %s ", time.Now().Format("15:04:05"))
+	station.Unlock()
 }
 
 func (station *StationWidget) updateStation(i int) {
@@ -122,7 +121,7 @@ func (station *StationWidget) updateStation(i int) {
 	// calculate the length of the columns
 	from := time.Now().Add(-2 * time.Minute)
 	until := time.Now().Add(time.Hour)
-	filteredDeps := deps[:0] // no need to waste space*/
+	filteredDeps := deps[:0] // no need to waste space
 
 	for _, dep := range deps {
 		if dep.When.Before(from) || dep.When.After(until) {
@@ -132,7 +131,8 @@ func (station *StationWidget) updateStation(i int) {
 		dep.Line.Product = strings.TrimSpace(dep.Line.Product)
 		dep.Direction = strings.TrimSpace(dep.Direction)
 		dep.Line.Name = strings.TrimSpace(dep.Line.Name)
-		dep.Station = station.settings[i].Name
+		dep.Station = station.settings[i].Name // this is kinda ugly but we need to add this to every departure
+		// because we sort the departures before generating so we'd lose access to it
 
 		// apply filters
 		if isFiltered(fm, dep.Line.Product) {
@@ -154,6 +154,7 @@ func (station *StationWidget) updateStation(i int) {
 	station.stationDepartures[i] = filteredDeps
 }
 
+// this isn't that great of a way of doing it - probably need to think of a better table later
 func (station *StationWidget) generateTable() {
 	strings := make([][]string, len(station.departures))
 	styles := make([][]*termui.Style, len(station.departures))
@@ -184,6 +185,7 @@ func (station *StationWidget) generateTable() {
 
 	station.Rows = strings
 	station.Styles = styles
+	station.Footer = fmt.Sprintf(" Last refresh: %s ", time.Now().Format("15:04:05"))
 }
 
 // -------------------------------------------------------------------------
@@ -233,7 +235,7 @@ func departureTime(r api.Result) string {
 // SERIOUSLY THIS SHOULD BE PART OF THE STANDARD LIBRARY!!!
 // I don't care that it's just 6 lines. It's just annoying to either have some kind of
 // utils package just for this one function or to have this just floating around
-// in some other package.
+// in some other package. </rant>
 func maxInt(a, b int) int {
 	if a > b {
 		return a
