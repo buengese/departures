@@ -1,6 +1,8 @@
 # departures-interactive
 Show departure times for your Berlin public transport station. This is a fork of the original departures intended to run on info displays or in the background
 
+![screenshot of a departure table](https://raw.githubusercontent.com/buengese/departures/master/images/screen.png)
+
 ## install
 To install from source you need to have a current Go version installed.
 
